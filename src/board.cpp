@@ -13,7 +13,7 @@ void ChessBoard::setup_pieces() {
 	/* Pawn Setup */
 	for(int i = 0; i < NUM_TILES; i++) {
 		board[1][i] = { PAWN, BLACK }; // Init second row with black pawns
-		board[6][i] = { PAWN, BLACK }; // Init seventh row with white pawns
+		board[6][i] = { PAWN, WHITE }; // Init seventh row with white pawns
 	}
 
 	/* Black Piece Setup */

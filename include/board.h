@@ -12,4 +12,6 @@ public:
 	std::vector<std::vector<Piece>> board;
 };
 
+bool is_valid_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol);
+
 #endif // BOARD_H

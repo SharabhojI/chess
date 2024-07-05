@@ -4,8 +4,8 @@ CXX = g++
 # Compiler flags
 CXXFLAGS = -Iinclude -std=c++11
 
-# SDL2 and SDL2_image library flags
-SDL2_FLAGS = -lSDL2 -lSDL2_image
+# SDL2, SDL2_image, and SDL2_ttf library flags
+SDL2_FLAGS = -lSDL2 -lSDL2_image -lSDL2_ttf
 
 # Directories
 SRC_DIR = src
