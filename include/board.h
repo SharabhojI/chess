@@ -13,5 +13,8 @@ public:
 };
 
 bool is_valid_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol);
+bool is_check(ChessBoard& board, Color color);
+bool is_checkmate(ChessBoard& board, Color color);
+bool is_stalemate(ChessBoard& board, Color color);
 
 #endif // BOARD_H

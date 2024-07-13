@@ -176,6 +176,17 @@ int main(int argc, char* args[]) {
                             valid_moves = get_valid_moves(chessBoard, row, col);
                         }
                     }
+
+                    // @TODO: implement logic
+                    if (is_checkmate(chessBoard, WHITE)) {
+
+                    } else if (is_checkmate(chessBoard, BLACK)) {
+
+                    } else if (is_stalemate(chessBoard, WHITE)) {
+
+                    } else if (is_stalemate(chessBoard, BLACK)) {
+
+                    }
                 }
             }
         }
