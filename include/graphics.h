@@ -7,6 +7,7 @@
 #include <map>
 #include <vector>
 #include <string>
+#include <cstddef>
 #include "board.h"
 #include "piece.h"
 

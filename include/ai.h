@@ -2,6 +2,7 @@
 #ifndef AI_H
 #define AI_H
 
+#include <cstddef>
 #include "board.h"
 
 int evaluate_board(const ChessBoard& board);
