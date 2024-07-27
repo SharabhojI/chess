@@ -37,7 +37,7 @@ std::vector<std::pair<int, int>> generate_moves(const ChessBoard& board, int row
     std::vector<std::pair<int, int>> moves;
     for (int destRow = 0; destRow < NUM_TILES; destRow++) {
         for (int destCol = 0; destCol < NUM_TILES; destCol++) {
-            if (is_valid_move(board, row, col, destRow, destCol)) {
+            if (is_valid_move(board, row, col, destRow, destCol, board[row][col].color)) {
                 moves.push_back({destRow, destCol});
             }
         }

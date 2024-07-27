@@ -42,174 +42,162 @@ void ChessBoard::setup_pieces() {
 	board[7][4] = { KING, WHITE };
 }
 
-bool is_valid_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
-    std::cout << "Checking move from (" << srcRow << "," << srcCol << ") to (" << destRow << "," << destCol << ")" << std::endl;
+bool is_valid_pawn_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
+    int direction = (board.board[srcRow][srcCol].color == WHITE) ? -1 : 1;
+    int startRow = (board.board[srcRow][srcCol].color == WHITE) ? 6 : 1;
 
+    // Forward move
+    if (srcCol == destCol) {
+        if (destRow == srcRow + direction && board.board[destRow][destCol].type == EMPTY) {
+            return true;
+        }
+        if (srcRow == startRow && destRow == srcRow + 2 * direction &&
+            board.board[srcRow + direction][srcCol].type == EMPTY &&
+            board.board[destRow][destCol].type == EMPTY) {
+            return true;
+        }
+    }
+
+    // Capture move
+    if (destRow == srcRow + direction && std::abs(destCol - srcCol) == 1) {
+        if (board.board[destRow][destCol].type != EMPTY &&
+            board.board[destRow][destCol].color != board.board[srcRow][srcCol].color) {
+            return true;
+        }
+        // En passant
+        if (board.board[destRow][destCol].type == EMPTY &&
+            board.last_move == std::make_pair(destRow - direction, destCol) &&
+            board.last_move_start == std::make_pair(destRow + direction, destCol) &&
+            board.last_move_was_pawn_double &&
+            board.board[destRow - direction][destCol].type == PAWN &&
+            board.board[destRow - direction][destCol].color != board.board[srcRow][srcCol].color) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool is_valid_knight_move(int srcRow, int srcCol, int destRow, int destCol) {
+    int rowDiff = std::abs(destRow - srcRow);
+    int colDiff = std::abs(destCol - srcCol);
+    return (rowDiff == 2 && colDiff == 1) || (rowDiff == 1 && colDiff == 2);
+}
+
+bool is_valid_bishop_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
+    if (std::abs(destRow - srcRow) != std::abs(destCol - srcCol)) {
+        return false;
+    }
+    int rowDir = (destRow > srcRow) ? 1 : -1;
+    int colDir = (destCol > srcCol) ? 1 : -1;
+    for (int i = 1; i < std::abs(destRow - srcRow); ++i) {
+        if (board.board[srcRow + i * rowDir][srcCol + i * colDir].type != EMPTY) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_valid_rook_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
+    if (srcRow != destRow && srcCol != destCol) {
+        return false;
+    }
+    int rowDir = (destRow > srcRow) ? 1 : (destRow < srcRow) ? -1 : 0;
+    int colDir = (destCol > srcCol) ? 1 : (destCol < srcCol) ? -1 : 0;
+    for (int i = 1; i < std::max(std::abs(destRow - srcRow), std::abs(destCol - srcCol)); ++i) {
+        if (board.board[srcRow + i * rowDir][srcCol + i * colDir].type != EMPTY) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool is_valid_queen_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
+    return is_valid_bishop_move(board, srcRow, srcCol, destRow, destCol) ||
+           is_valid_rook_move(board, srcRow, srcCol, destRow, destCol);
+}
+
+bool is_valid_king_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
+    int rowDiff = std::abs(destRow - srcRow);
+    int colDiff = std::abs(destCol - srcCol);
+
+    // Normal king move
+    if (rowDiff <= 1 && colDiff <= 1) {
+        return true;
+    }
+
+    // Castling
+    if (rowDiff == 0 && colDiff == 2) {
+        Color color = board.board[srcRow][srcCol].color;
+        if (color == WHITE && !board.white_king_moved) {
+            if (destCol > srcCol && !board.white_kingside_rook_moved) {
+                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
+            } else if (destCol < srcCol && !board.white_queenside_rook_moved) {
+                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
+            }
+        } else if (color == BLACK && !board.black_king_moved) {
+            if (destCol > srcCol && !board.black_kingside_rook_moved) {
+                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
+            } else if (destCol < srcCol && !board.black_queenside_rook_moved) {
+                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
+            }
+        }
+    }
+
+    return false;
+}
+
+bool is_valid_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol, Color currentTurn) {
     // Check if the move is within bounds
     if (srcRow < 0 || srcRow >= NUM_TILES || srcCol < 0 || srcCol >= NUM_TILES ||
         destRow < 0 || destRow >= NUM_TILES || destCol < 0 || destCol >= NUM_TILES) {
-        std::cout << "Move is out of bounds" << std::endl;
         return false;
     }
 
     Piece srcPiece = board.board[srcRow][srcCol];
     Piece destPiece = board.board[destRow][destCol];
 
-    std::cout << "Source piece: " << srcPiece.type << ", " << srcPiece.color << std::endl;
-    std::cout << "Destination piece: " << destPiece.type << ", " << destPiece.color << std::endl;
-
     // Check if the destination is occupied by a piece of the same color
     if (destPiece.color == srcPiece.color && destPiece.type != EMPTY) {
-        std::cout << "Cannot capture own piece" << std::endl;
         return false;
     }
 
-    // Check for castling
-    if (srcPiece.type == KING && std::abs(destCol - srcCol) == 2) {
-        // Castling attempt
-        if (srcPiece.color == WHITE && srcRow == 7 && srcCol == 4) {
-            if (destCol == 6 && !board.white_king_moved && !board.white_kingside_rook_moved) {
-                // White kingside castling
-                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, WHITE);
-            } else if (destCol == 2 && !board.white_king_moved && !board.white_queenside_rook_moved) {
-                // White queenside castling
-                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, WHITE);
-            }
-        } else if (srcPiece.color == BLACK && srcRow == 0 && srcCol == 4) {
-            if (destCol == 6 && !board.black_king_moved && !board.black_kingside_rook_moved) {
-                // Black kingside castling
-                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, BLACK);
-            } else if (destCol == 2 && !board.black_king_moved && !board.black_queenside_rook_moved) {
-                // Black queenside castling
-                return is_castling_valid(board, srcRow, srcCol, destRow, destCol, BLACK);
-            }
-        }
+    // Check if the source piece exists and belongs to the current player
+    if (srcPiece.type == EMPTY || srcPiece.color != currentTurn) {
+        return false;
     }
+
+    bool valid_move = false;
 
     switch (srcPiece.type) {
         case PAWN:
-            if (srcPiece.color == WHITE) {
-                // Standard one square forward move
-                if (destRow == srcRow - 1 && destCol == srcCol && destPiece.type == EMPTY) {
-                    std::cout << "Valid white pawn forward move" << std::endl;
-                    return true;
-                }
-                // Initial two squares forward move
-                if (srcRow == 6 && destRow == srcRow - 2 && destCol == srcCol &&
-                    destPiece.type == EMPTY && board.board[srcRow - 1][srcCol].type == EMPTY) {
-                    std::cout << "Valid white pawn initial two-square move" << std::endl;
-                    return true;
-                }
-                // Diagonal capture
-                if (destRow == srcRow - 1 && std::abs(destCol - srcCol) == 1 && destPiece.color == BLACK) {
-                    std::cout << "Valid white pawn diagonal capture" << std::endl;
-                    return true;
-                }
-            } else if (srcPiece.color == BLACK) {
-                // Standard one square forward move
-                if (destRow == srcRow + 1 && destCol == srcCol && destPiece.type == EMPTY) {
-                    std::cout << "Valid black pawn forward move" << std::endl;
-                    return true;
-                }
-                // Initial two squares forward move
-                if (srcRow == 1 && destRow == srcRow + 2 && destCol == srcCol &&
-                    destPiece.type == EMPTY && board.board[srcRow + 1][srcCol].type == EMPTY) {
-                    std::cout << "Valid black pawn initial two-square move" << std::endl;
-                    return true;
-                }
-                // Diagonal capture
-                if (destRow == srcRow + 1 && std::abs(destCol - srcCol) == 1 && destPiece.color == WHITE) {
-                    std::cout << "Valid black pawn diagonal capture" << std::endl;
-                    return true;
-                }
-            }
-            std::cout << "Invalid pawn move" << std::endl;
+            valid_move = is_valid_pawn_move(board, srcRow, srcCol, destRow, destCol);
             break;
-
         case KNIGHT:
-            if ((abs(destRow - srcRow) == 2 && abs(destCol - srcCol) == 1) ||
-                (abs(destRow - srcRow) == 1 && abs(destCol - srcCol) == 2)) {
-                return true;
-            }
+            valid_move = is_valid_knight_move(srcRow, srcCol, destRow, destCol);
             break;
-
         case BISHOP:
-            if (abs(destRow - srcRow) == abs(destCol - srcCol)) {
-                int rowDirection = (destRow - srcRow) / abs(destRow - srcRow);
-                int colDirection = (destCol - srcCol) / abs(destCol - srcCol);
-                for (int i = 1; i < abs(destRow - srcRow); i++) {
-                    if (board.board[srcRow + i * rowDirection][srcCol + i * colDirection].type != EMPTY) {
-                        return false;
-                    }
-                }
-                return true;
-            }
+            valid_move = is_valid_bishop_move(board, srcRow, srcCol, destRow, destCol);
             break;
-
         case ROOK:
-            if (srcRow == destRow || srcCol == destCol) {
-                if (srcRow == destRow) {
-                    int direction = (destCol - srcCol) / abs(destCol - srcCol);
-                    for (int i = 1; i < abs(destCol - srcCol); i++) {
-                        if (board.board[srcRow][srcCol + i * direction].type != EMPTY) {
-                            return false;
-                        }
-                    }
-                } else {
-                    int direction = (destRow - srcRow) / abs(destRow - srcRow);
-                    for (int i = 1; i < abs(destRow - srcRow); i++) {
-                        if (board.board[srcRow + i * direction][srcCol].type != EMPTY) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            }
+            valid_move = is_valid_rook_move(board, srcRow, srcCol, destRow, destCol);
             break;
-
         case QUEEN:
-            if ((srcRow == destRow || srcCol == destCol) ||
-                (abs(destRow - srcRow) == abs(destCol - srcCol))) {
-                if (srcRow == destRow || srcCol == destCol) {
-                    if (srcRow == destRow) {
-                        int direction = (destCol - srcCol) / abs(destCol - srcCol);
-                        for (int i = 1; i < abs(destCol - srcCol); i++) {
-                            if (board.board[srcRow][srcCol + i * direction].type != EMPTY) {
-                                return false;
-                            }
-                        }
-                    } else {
-                        int direction = (destRow - srcRow) / abs(destRow - srcRow);
-                        for (int i = 1; i < abs(destRow - srcRow); i++) {
-                            if (board.board[srcRow + i * direction][srcCol].type != EMPTY) {
-                                return false;
-                            }
-                        }
-                    }
-                } else {
-                    int rowDirection = (destRow - srcRow) / abs(destRow - srcRow);
-                    int colDirection = (destCol - srcCol) / abs(destCol - srcCol);
-                    for (int i = 1; i < abs(destRow - srcRow); i++) {
-                        if (board.board[srcRow + i * rowDirection][srcCol + i * colDirection].type != EMPTY) {
-                            return false;
-                        }
-                    }
-                }
-                return true;
-            }
+            valid_move = is_valid_queen_move(board, srcRow, srcCol, destRow, destCol);
             break;
-
         case KING:
-            if (abs(destRow - srcRow) <= 1 && abs(destCol - srcCol) <= 1) {
-                return true;
-            }
+            valid_move = is_valid_king_move(board, srcRow, srcCol, destRow, destCol);
             break;
-
         default:
             return false;
     }
 
-    return false;
+    // Check if the move would result in self-check
+    if (valid_move && would_be_in_check(board, srcRow, srcCol, destRow, destCol)) {
+        return false;
+    }
+
+    return valid_move;
 }
 
 bool is_castling_valid(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol, Color color) {
@@ -240,7 +228,7 @@ bool is_square_attacked(const ChessBoard& board, int row, int col, Color attacki
     for (int r = 0; r < NUM_TILES; r++) {
         for (int c = 0; c < NUM_TILES; c++) {
             if (board.board[r][c].color == attackingColor) {
-                if (is_valid_move(board, r, c, row, col)) {
+                if (is_valid_move(board, r, c, row, col, attackingColor)) {
                     return true;
                 }
             }
@@ -253,7 +241,7 @@ std::vector<std::pair<int, int>> get_valid_moves(const ChessBoard& board, int ro
     std::vector<std::pair<int, int>> valid_moves;
     for (int destRow = 0; destRow < NUM_TILES; destRow++) {
         for (int destCol = 0; destCol < NUM_TILES; destCol++) {
-            if (is_valid_move(board, row, col, destRow, destCol)) {
+            if (is_valid_move(board, row, col, destRow, destCol, board[row][col].color)) {
                 valid_moves.push_back({destRow, destCol});
             }
         }
@@ -276,13 +264,20 @@ bool is_check(const ChessBoard& board, Color color) {
 	for(int row = 0; row < NUM_TILES; row++) {
 		for(int col = 0; col < NUM_TILES; col++) {
 			if(board.board[row][col].color != color && board.board[row][col].type != EMPTY) {
-				if(is_valid_move(board, row, col, kingPos.first, kingPos.second)) {
+				if(is_valid_move(board, row, col, kingPos.first, kingPos.second, color)) {
 					return true;
 				}
 			}
 		}
 	}
 	return false;
+}
+
+bool would_be_in_check(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
+    ChessBoard tempBoard = board;
+    tempBoard.board[destRow][destCol] = tempBoard.board[srcRow][srcCol];
+    tempBoard.board[srcRow][srcCol] = { EMPTY, NONE };
+    return is_check(tempBoard, tempBoard.board[destRow][destCol].color);
 }
 
 /** Function to determine if Checkmate **/

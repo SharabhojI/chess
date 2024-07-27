@@ -1,6 +1,7 @@
 /** Includes **/
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
+#include <SDL2/SDL_messagebox.h>
 #include <string>
 #include <map>
 #include <vector>
@@ -76,6 +77,62 @@ bool is_inside_button(int x, int y, int bx, int by, int bw, int bh) {
     return x >= bx && x <= bx + bw && y >= by && y <= by + bh;
 }
 
+void reset_game(ChessBoard& board, bool& game_started, bool& is_white_turn, bool& pieceSelected, int& selectedRow, int& selectedCol, std::vector<std::pair<int, int>>& valid_moves) {
+    board = ChessBoard();
+    game_started = false;
+    is_white_turn = true;
+    moveHistory.clear();
+    pieceSelected = false;
+    selectedRow = -1;
+    selectedCol = -1;
+    valid_moves.clear();
+    std::cout << "Game reset!" << std::endl;
+}
+
+void show_game_end_message(SDL_Window* window, const char* message, ChessBoard& board, bool& game_started, bool& is_white_turn, bool& pieceSelected, int& selectedRow, int& selectedCol, std::vector<std::pair<int, int>>& valid_moves) {
+    const SDL_MessageBoxButtonData buttons[] = {
+        { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 0, "New Game" },
+        { SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 1, "Quit" },
+    };
+    const SDL_MessageBoxColorScheme colorScheme = {
+        { /* .colors (.r, .g, .b) */
+            /* [SDL_MESSAGEBOX_COLOR_BACKGROUND] */
+            { 255, 255, 255 },
+            /* [SDL_MESSAGEBOX_COLOR_TEXT] */
+            {   0,   0,   0 },
+            /* [SDL_MESSAGEBOX_COLOR_BUTTON_BORDER] */
+            { 100, 100, 100 },
+            /* [SDL_MESSAGEBOX_COLOR_BUTTON_BACKGROUND] */
+            { 200, 200, 200 },
+            /* [SDL_MESSAGEBOX_COLOR_BUTTON_SELECTED] */
+            { 150, 150, 150 }
+        }
+    };
+    const SDL_MessageBoxData messageboxdata = {
+        SDL_MESSAGEBOX_INFORMATION,
+        window,
+        "Game Over",
+        message,
+        SDL_arraysize(buttons),
+        buttons,
+        &colorScheme
+    };
+    int buttonid;
+    if (SDL_ShowMessageBox(&messageboxdata, &buttonid) < 0) {
+        SDL_Log("error displaying message box");
+        return;
+    }
+    if (buttonid == 0) {
+        // Start a new game
+        reset_game(board, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
+    } else {
+        // Quit the game
+        SDL_Event quit_event;
+        quit_event.type = SDL_QUIT;
+        SDL_PushEvent(&quit_event);
+    }
+}
+
 void update_move_history(int srcRow, int srcCol, int destRow, int destCol, Piece piece) {
     char cols[] = "abcdefgh";
     std::string move = piece_to_string(piece.type) + cols[srcCol] + std::to_string(8 - srcRow) + " to " + cols[destCol] + std::to_string(8 - destRow);
@@ -88,6 +145,15 @@ void make_move(ChessBoard& board, int srcRow, int srcCol, int destRow, int destC
     Piece piece = board.board[srcRow][srcCol];
     std::cout << "Moving piece: " << piece.type << ", " << piece.color << std::endl;
     update_move_history(srcRow, srcCol, destRow, destCol, piece);
+
+    // Handle en passant capture
+    if (piece.type == PAWN && std::abs(destCol - srcCol) == 1 && board.board[destRow][destCol].type == EMPTY) {
+        if (piece.color == WHITE && srcRow == 3) {
+            board.board[srcRow][destCol] = { EMPTY, NONE };
+        } else if (piece.color == BLACK && srcRow == 4) {
+            board.board[srcRow][destCol] = { EMPTY, NONE };
+        }
+    }
 
     // Handle castling
     if (piece.type == KING && std::abs(destCol - srcCol) == 2) {
@@ -119,9 +185,20 @@ void make_move(ChessBoard& board, int srcRow, int srcCol, int destRow, int destC
         }
     }
 
+    // Pawn Promotion
+    if (piece.type == PAWN && (destRow == 0 || destRow == 7)) {
+        piece.type = QUEEN;
+        std::cout << "Pawn promoted to Queen!" << std::endl;
+    }
+
     // Make the move
     board.board[destRow][destCol] = piece;
     board.board[srcRow][srcCol] = { EMPTY, NONE };
+
+    // Update last move
+    board.last_move_start = {srcRow, srcCol};
+    board.last_move = {destRow, destCol};
+    board.last_move_was_pawn_double = (piece.type == PAWN && std::abs(destRow - srcRow) == 2);
 
     // Switch turns
     is_white_turn = !is_white_turn;
@@ -188,20 +265,12 @@ int main(int argc, char* args[]) {
                     make_best_move(chessBoard);
                     is_white_turn = false;  // Switch to Black's turn after AI moves
                 } else if (is_inside_button(x, y, reset_button_x, reset_button_y, button_width, button_height)) {
-                    chessBoard = ChessBoard();
-                    game_started = false;
-                    is_white_turn = true;
-                    moveHistory.clear();
-                    pieceSelected = false;
-                    selectedRow = -1;
-                    selectedCol = -1;
-                    valid_moves.clear();
-                    std::cout << "Game reset!" << std::endl;
+                    reset_game(chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                 } else if (game_started && !is_white_turn) {  // Only allow moves on Black's turn
                     int row = y / 80;
                     int col = x / 80;
                     if (pieceSelected) {
-                        if (is_valid_move(chessBoard, selectedRow, selectedCol, row, col)) {
+                        if (is_valid_move(chessBoard, selectedRow, selectedCol, row, col, chessBoard[selectedRow][selectedCol].color)) {
                             make_move(chessBoard, selectedRow, selectedCol, row, col);
                             pieceSelected = false;
                             selectedRow = -1;
@@ -225,14 +294,11 @@ int main(int argc, char* args[]) {
                     }
                     // Check for game-ending conditions
                     if (is_checkmate(chessBoard, WHITE)) {
-                        std::cout << "Checkmate! Black wins." << std::endl;
-                        game_started = false;
+                        show_game_end_message(window, "Checkmate! Black wins.", chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                     } else if (is_checkmate(chessBoard, BLACK)) {
-                        std::cout << "Checkmate! White wins." << std::endl;
-                        game_started = false;
+                        show_game_end_message(window, "Checkmate! White wins.", chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                     } else if (is_stalemate(chessBoard, WHITE) || is_stalemate(chessBoard, BLACK)) {
-                        std::cout << "Stalemate! The game is a draw." << std::endl;
-                        game_started = false;
+                        show_game_end_message(window, "Stalemate! The game is a draw.", chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                     }
                 }
             }
