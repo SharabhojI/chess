@@ -192,12 +192,19 @@ bool is_valid_move(const ChessBoard& board, int srcRow, int srcCol, int destRow,
             return false;
     }
 
-    // Check if the move would result in self-check
-    if (valid_move && would_be_in_check(board, srcRow, srcCol, destRow, destCol)) {
+    if (!valid_move) {
         return false;
     }
 
-    return valid_move;
+    // Check if the move would leave the king in check
+    ChessBoard tempBoard = board;
+    tempBoard.board[destRow][destCol] = tempBoard.board[srcRow][srcCol];
+    tempBoard.board[srcRow][srcCol] = { EMPTY, NONE };
+    if (is_check(tempBoard, currentTurn)) {
+        return false;
+    }
+
+    return true;
 }
 
 bool is_castling_valid(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol, Color color) {
@@ -237,11 +244,11 @@ bool is_square_attacked(const ChessBoard& board, int row, int col, Color attacki
     return false;
 }
 
-std::vector<std::pair<int, int>> get_valid_moves(const ChessBoard& board, int row, int col) {
+std::vector<std::pair<int, int>> get_valid_moves(const ChessBoard& board, int row, int col, Color currentTurn) {
     std::vector<std::pair<int, int>> valid_moves;
     for (int destRow = 0; destRow < NUM_TILES; destRow++) {
         for (int destCol = 0; destCol < NUM_TILES; destCol++) {
-            if (is_valid_move(board, row, col, destRow, destCol, board[row][col].color)) {
+            if (is_valid_move(board, row, col, destRow, destCol, currentTurn)) {
                 valid_moves.push_back({destRow, destCol});
             }
         }
@@ -251,26 +258,27 @@ std::vector<std::pair<int, int>> get_valid_moves(const ChessBoard& board, int ro
 
 /** Function to determine if check **/
 bool is_check(const ChessBoard& board, Color color) {
-	std::pair<int, int> kingPos; // pair to hold the King's position
-	for(int row = 0; row < NUM_TILES; row++) {
-		for(int col = 0; col < NUM_TILES; col++) {
-			if(board.board[row][col].type == KING && board.board[row][col].color == color) {
-				kingPos = { row, col };
-				break;
-			}
-		}
-	}
+    std::pair<int, int> kingPos;
+    for(int row = 0; row < NUM_TILES; row++) {
+        for(int col = 0; col < NUM_TILES; col++) {
+            if(board.board[row][col].type == KING && board.board[row][col].color == color) {
+                kingPos = { row, col };
+                goto found_king;
+            }
+        }
+    }
+    found_king:
 
-	for(int row = 0; row < NUM_TILES; row++) {
-		for(int col = 0; col < NUM_TILES; col++) {
-			if(board.board[row][col].color != color && board.board[row][col].type != EMPTY) {
-				if(is_valid_move(board, row, col, kingPos.first, kingPos.second, color)) {
-					return true;
-				}
-			}
-		}
-	}
-	return false;
+    for(int row = 0; row < NUM_TILES; row++) {
+        for(int col = 0; col < NUM_TILES; col++) {
+            if(board.board[row][col].color != color && board.board[row][col].type != EMPTY) {
+                if(is_valid_move(board, row, col, kingPos.first, kingPos.second, board.board[row][col].color)) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 bool would_be_in_check(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
@@ -282,43 +290,49 @@ bool would_be_in_check(const ChessBoard& board, int srcRow, int srcCol, int dest
 
 /** Function to determine if Checkmate **/
 bool is_checkmate(ChessBoard& board, Color color) {
-	if(!is_check(board, color)) {
-		return false;
-	}
+    if(!is_check(board, color)) {
+        return false;
+    }
 
-	for(int row = 0; row < NUM_TILES; row++) {
-		for(int col = 0; col < NUM_TILES; col++) {
-			if(board.board[row][col].color == color) {
-				std::vector<std::pair<int, int>> moves = get_valid_moves(board, row, col);
-				for(auto move : moves) {
-					ChessBoard tempBoard = board;
-					tempBoard.board[move.first][move.second] = tempBoard.board[row][col];
-					tempBoard.board[row][col] = { EMPTY, NONE };
-					if(!is_check(tempBoard, color)) {
-						return false;
-					}
-				}
-			}
-		}
-	}
-	return true;
+    for(int srcRow = 0; srcRow < NUM_TILES; srcRow++) {
+        for(int srcCol = 0; srcCol < NUM_TILES; srcCol++) {
+            if(board.board[srcRow][srcCol].color == color) {
+                for(int destRow = 0; destRow < NUM_TILES; destRow++) {
+                    for(int destCol = 0; destCol < NUM_TILES; destCol++) {
+                        if(is_valid_move(board, srcRow, srcCol, destRow, destCol, color)) {
+                            ChessBoard tempBoard = board;
+                            tempBoard.board[destRow][destCol] = tempBoard.board[srcRow][srcCol];
+                            tempBoard.board[srcRow][srcCol] = { EMPTY, NONE };
+                            if(!is_check(tempBoard, color)) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
 }
 
 /** Function to detect Stalemate **/
 bool is_stalemate(ChessBoard& board, Color color) {
-	if(is_check(board, color)) {
-		return false;
-	}
+    if(is_check(board, color)) {
+        return false;
+    }
 
-	for(int row = 0; row < NUM_TILES; row++) {
-		for(int col = 0; col < NUM_TILES; col++) {
-			if(board.board[row][col].color == color) {
-				std::vector<std::pair<int, int>> moves = get_valid_moves(board, row, col);
-				if(!moves.empty()) {
-					return false;
-				}
-			}
-		}
-	}
-	return true;
+    for(int srcRow = 0; srcRow < NUM_TILES; srcRow++) {
+        for(int srcCol = 0; srcCol < NUM_TILES; srcCol++) {
+            if(board.board[srcRow][srcCol].color == color) {
+                for(int destRow = 0; destRow < NUM_TILES; destRow++) {
+                    for(int destCol = 0; destCol < NUM_TILES; destCol++) {
+                        if(is_valid_move(board, srcRow, srcCol, destRow, destCol, color)) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    return true;
 }

@@ -14,6 +14,8 @@
 #include "piece.h"
 #include "ai.h"
 
+const int TILE_SIZE = 80;
+
 bool is_white_turn = true;
 
 /** Data Struct for move history **/
@@ -157,16 +159,10 @@ void make_move(ChessBoard& board, int srcRow, int srcCol, int destRow, int destC
 
     // Handle castling
     if (piece.type == KING && std::abs(destCol - srcCol) == 2) {
-        // Kingside castling
-        if (destCol > srcCol) {
-            board.board[destRow][destCol - 1] = board.board[destRow][7];
-            board.board[destRow][7] = { EMPTY, NONE };
-        }
-        // Queenside castling
-        else {
-            board.board[destRow][destCol + 1] = board.board[destRow][0];
-            board.board[destRow][0] = { EMPTY, NONE };
-        }
+        int rookSrcCol = (destCol > srcCol) ? 7 : 0;
+        int rookDestCol = (destCol > srcCol) ? destCol - 1 : destCol + 1;
+        board.board[destRow][rookDestCol] = board.board[destRow][rookSrcCol];
+        board.board[destRow][rookSrcCol] = { EMPTY, NONE };
     }
 
     // Update castling flags
@@ -251,6 +247,7 @@ int main(int argc, char* args[]) {
     int reset_button_x = 770;
     int reset_button_y = 100;
 
+
     while (!quit) {
         while (SDL_PollEvent(&e) != 0) {
             if (e.type == SDL_QUIT) {
@@ -267,16 +264,15 @@ int main(int argc, char* args[]) {
                 } else if (is_inside_button(x, y, reset_button_x, reset_button_y, button_width, button_height)) {
                     reset_game(chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                 } else if (game_started && !is_white_turn) {  // Only allow moves on Black's turn
-                    int row = y / 80;
-                    int col = x / 80;
+                    int row = y / TILE_SIZE;
+                    int col = x / TILE_SIZE;
                     if (pieceSelected) {
-                        if (is_valid_move(chessBoard, selectedRow, selectedCol, row, col, chessBoard[selectedRow][selectedCol].color)) {
+                        if (is_valid_move(chessBoard, selectedRow, selectedCol, row, col, BLACK)) {
                             make_move(chessBoard, selectedRow, selectedCol, row, col);
                             pieceSelected = false;
                             selectedRow = -1;
                             selectedCol = -1;
                             valid_moves.clear();
-                            // AI's turn will be triggered in make_move function
                         } else {
                             // If the move is invalid, deselect the piece
                             pieceSelected = false;
@@ -289,13 +285,13 @@ int main(int argc, char* args[]) {
                             selectedRow = row;
                             selectedCol = col;
                             pieceSelected = true;
-                            valid_moves = get_valid_moves(chessBoard, row, col);
+                            valid_moves = get_valid_moves(chessBoard, row, col, BLACK);
                         }
                     }
                     // Check for game-ending conditions
                     if (is_checkmate(chessBoard, WHITE)) {
                         show_game_end_message(window, "Checkmate! Black wins.", chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
-                    } else if (is_checkmate(chessBoard, BLACK)) {
+                    } else if (is_checkmate(chessBoard, BLACK))  {
                         show_game_end_message(window, "Checkmate! White wins.", chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                     } else if (is_stalemate(chessBoard, WHITE) || is_stalemate(chessBoard, BLACK)) {
                         show_game_end_message(window, "Stalemate! The game is a draw.", chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
@@ -314,6 +310,7 @@ int main(int argc, char* args[]) {
         draw_move_history(renderer, font, 650, 200, moveHistory);
         SDL_RenderPresent(renderer);
     }
+
     for (auto& texture : white_pieces) {
         SDL_DestroyTexture(texture.second);
     }

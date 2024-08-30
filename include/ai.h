@@ -6,8 +6,8 @@
 #include "board.h"
 
 int evaluate_board(const ChessBoard& board);
-int minimax(ChessBoard& board, int depth, bool isMaximizingPlayer);
-int alpha_beta(ChessBoard& board, int depth, int alpha, int beta, bool isMaximizingPlayer);
+std::vector<std::pair<int, int>> generate_moves(const ChessBoard& board, int row, int col);
+int minimax(ChessBoard& board, int depth, bool isMaximizingPlayer, int alpha, int beta, int& moveCount);
 void make_best_move(ChessBoard& board);
 
 #endif // AI_H

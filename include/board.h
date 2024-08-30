@@ -43,7 +43,7 @@ bool is_valid_queen_move(const ChessBoard& board, int srcRow, int srcCol, int de
 bool is_valid_king_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol);
 
 bool is_valid_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol, Color currentTurn);
-std::vector<std::pair<int, int>> get_valid_moves(const ChessBoard& board, int row, int col);
+std::vector<std::pair<int, int>> get_valid_moves(const ChessBoard& board, int row, int col, Color currentTurn);
 bool is_check(const ChessBoard& board, Color color);
 bool is_checkmate(ChessBoard& board, Color color);
 bool is_stalemate(ChessBoard& board, Color color);
