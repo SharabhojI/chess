@@ -11,12 +11,12 @@ ChessBoard::ChessBoard() {
 	setup_pieces(); // Set up the initial positions
 
     // Initialize castling flags
-    white_king_moved = false;
-    black_king_moved = false;
-    white_kingside_rook_moved = false;
-    white_queenside_rook_moved = false;
-    black_kingside_rook_moved = false;
-    black_queenside_rook_moved = false;
+    whiteKingMoved = false;
+    blackKingMoved = false;
+    whiteKingsideRookMoved = false;
+    whiteQueensideRookMoved = false;
+    blackKingsideRookMoved = false;
+    blackQueensideRookMoved = false;
 }
 
 /** Piece Setup Method **/
@@ -40,6 +40,19 @@ void ChessBoard::setup_pieces() {
 	board[7][2] = board[7][5] = { BISHOP, WHITE };
 	board[7][3] = { QUEEN, WHITE };
 	board[7][4] = { KING, WHITE };
+}
+
+/** Function to convert a piece to String **/
+std::string piece_to_string(PieceType type) {
+    switch (type) {
+        case PAWN: return "";
+        case KNIGHT: return "N";
+        case BISHOP: return "B";
+        case ROOK: return "R";
+        case QUEEN: return "Q";
+        case KING: return "K";
+        default: return "";
+    }
 }
 
 bool is_valid_pawn_move(const ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
@@ -66,9 +79,9 @@ bool is_valid_pawn_move(const ChessBoard& board, int srcRow, int srcCol, int des
         }
         // En passant
         if (board.board[destRow][destCol].type == EMPTY &&
-            board.last_move == std::make_pair(destRow - direction, destCol) &&
-            board.last_move_start == std::make_pair(destRow + direction, destCol) &&
-            board.last_move_was_pawn_double &&
+            board.lastMove == std::make_pair(destRow - direction, destCol) &&
+            board.lastMoveStart == std::make_pair(destRow + direction, destCol) &&
+            board.lastMoveWasPawnDouble &&
             board.board[destRow - direction][destCol].type == PAWN &&
             board.board[destRow - direction][destCol].color != board.board[srcRow][srcCol].color) {
             return true;
@@ -129,16 +142,16 @@ bool is_valid_king_move(const ChessBoard& board, int srcRow, int srcCol, int des
     // Castling
     if (rowDiff == 0 && colDiff == 2) {
         Color color = board.board[srcRow][srcCol].color;
-        if (color == WHITE && !board.white_king_moved) {
-            if (destCol > srcCol && !board.white_kingside_rook_moved) {
+        if (color == WHITE && !board.whiteKingMoved) {
+            if (destCol > srcCol && !board.whiteKingsideRookMoved) {
                 return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
-            } else if (destCol < srcCol && !board.white_queenside_rook_moved) {
+            } else if (destCol < srcCol && !board.whiteQueensideRookMoved) {
                 return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
             }
-        } else if (color == BLACK && !board.black_king_moved) {
-            if (destCol > srcCol && !board.black_kingside_rook_moved) {
+        } else if (color == BLACK && !board.blackKingMoved) {
+            if (destCol > srcCol && !board.blackKingsideRookMoved) {
                 return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
-            } else if (destCol < srcCol && !board.black_queenside_rook_moved) {
+            } else if (destCol < srcCol && !board.blackQueensideRookMoved) {
                 return is_castling_valid(board, srcRow, srcCol, destRow, destCol, color);
             }
         }
@@ -335,4 +348,114 @@ bool is_stalemate(ChessBoard& board, Color color) {
         }
     }
     return true;
+}
+
+void ChessBoard::record_move(int srcRow, int srcCol, int destRow, int destCol) {
+    Piece capturedPiece = board[destRow][destCol];
+    bool wasEnPassant = (board[srcRow][srcCol].type == PAWN && srcCol != destCol && capturedPiece.type == EMPTY);
+    bool wasCastling = (board[srcRow][srcCol].type == KING && std::abs(destCol - srcCol) == 2);
+    bool wasPawnPromotion = (board[srcRow][srcCol].type == PAWN && (destRow == 0 || destRow == 7));
+
+    Move move(srcRow, srcCol, destRow, destCol, capturedPiece, wasEnPassant, wasCastling, wasPawnPromotion);
+    moveHistory.push_back(move);
+}
+
+bool ChessBoard::undo_last_move() {
+    if (moveHistory.empty()) return false;
+
+    Move& move = moveHistory.back();
+
+    // Undo the move
+    board[move.srcRow][move.srcCol] = board[move.destRow][move.destCol];
+    board[move.destRow][move.destCol] = move.capturedPiece;
+
+    // Handle special cases
+    if (move.wasEnPassant) {
+        int capturedPawnRow = (move.srcRow + move.destRow) / 2;
+        board[capturedPawnRow][move.destCol] = {PAWN, (Color)(1 - board[move.srcRow][move.srcCol].color)};
+    } else if (move.wasCastling) {
+        int rookSrcCol = (move.destCol > move.srcCol) ? 7 : 0;
+        int rookDestCol = (move.destCol > move.srcCol) ? move.destCol - 1 : move.destCol + 1;
+        board[move.srcRow][rookSrcCol] = board[move.srcRow][rookDestCol];
+        board[move.srcRow][rookDestCol] = {EMPTY, NONE};
+    } else if (move.wasPawnPromotion) {
+        board[move.srcRow][move.srcCol].type = PAWN;
+    }
+
+    // Update castling flags
+    if (move.srcRow == 0 && move.srcCol == 4) blackKingMoved = false;
+    if (move.srcRow == 7 && move.srcCol == 4) whiteKingMoved = false;
+    if (move.srcRow == 0 && move.srcCol == 0) blackQueensideRookMoved = false;
+    if (move.srcRow == 0 && move.srcCol == 7) blackKingsideRookMoved = false;
+    if (move.srcRow == 7 && move.srcCol == 0) whiteQueensideRookMoved = false;
+    if (move.srcRow == 7 && move.srcCol == 7) whiteKingsideRookMoved = false;
+
+    // Update last move information
+    if (moveHistory.size() > 1) {
+        Move& prevMove = moveHistory[moveHistory.size() - 2];
+        lastMoveStart = {prevMove.srcRow, prevMove.srcCol};
+        lastMove = {prevMove.destRow, prevMove.destCol};
+        lastMoveWasPawnDouble = (prevMove.srcRow == 1 && prevMove.destRow == 3) || (prevMove.srcRow == 6 && prevMove.destRow == 4);
+    } else {
+        lastMoveStart = {-1, -1};
+        lastMove = {-1, -1};
+        lastMoveWasPawnDouble = false;
+    }
+
+    moveHistory.pop_back();
+    return true;
+}
+
+bool ChessBoard::redo_move() {
+    if (moveHistory.empty() || moveHistory.size() == moveHistory.capacity()) return false;
+
+    Move& move = moveHistory[moveHistory.size()];
+
+    // Redo the move
+    board[move.destRow][move.destCol] = board[move.srcRow][move.srcCol];
+    board[move.srcRow][move.srcCol] = { EMPTY, NONE };
+
+    // Handle special cases
+    if (move.wasEnPassant) {
+        int capturedPawnRow = (move.srcRow + move.destRow) / 2;
+        board[capturedPawnRow][move.destCol] = { EMPTY, NONE };
+    } else if (move.wasCastling) {
+        int rookSrcCol = (move.destCol > move.srcCol) ? 7 : 0;
+        int rookDestCol = (move.destCol > move.srcCol) ? move.destCol - 1 : move.destCol + 1;
+        board[move.srcRow][rookDestCol] = board[move.srcRow][rookSrcCol];
+        board[move.srcRow][rookSrcCol] = { EMPTY, NONE };
+    } else if (move.wasPawnPromotion) {
+        board[move.destRow][move.destCol].type = QUEEN; // Assuming promotion is always to queen
+    }
+
+    // Update castling flags
+    if (move.srcRow == 0 && move.srcCol == 4) blackKingMoved = true;
+    if (move.srcRow == 7 && move.srcCol == 4) whiteKingMoved = true;
+    if (move.srcRow == 0 && move.srcCol == 0) blackQueensideRookMoved = true;
+    if (move.srcRow == 0 && move.srcCol == 7) blackKingsideRookMoved = true;
+    if (move.srcRow == 7 && move.srcCol == 0) whiteQueensideRookMoved = true;
+    if (move.srcRow == 7 && move.srcCol == 7) whiteKingsideRookMoved = true;
+
+    // Update last move information
+    lastMoveStart = {move.srcRow, move.srcCol};
+    lastMove = {move.destRow, move.destCol};
+    lastMoveWasPawnDouble = (board[move.destRow][move.destCol].type == PAWN && std::abs(move.destRow - move.srcRow) == 2);
+
+    moveHistory.push_back(move);
+    return true;
+}
+
+std::string ChessBoard::move_to_string(const Move& move) const {
+    char cols[] = "abcdefgh";
+    std::string pieceStr = piece_to_string(board[move.destRow][move.destCol].type);
+    return pieceStr + cols[move.srcCol] + std::to_string(8 - move.srcRow) +
+           " to " + cols[move.destCol] + std::to_string(8 - move.destRow);
+}
+
+std::vector<std::string> ChessBoard::get_move_history_strings() const {
+    std::vector<std::string> history;
+    for (const auto& move : moveHistory) {
+        history.push_back(move_to_string(move));
+    }
+    return history;
 }

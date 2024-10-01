@@ -18,9 +18,6 @@ const int TILE_SIZE = 80;
 
 bool is_white_turn = true;
 
-/** Data Struct for move history **/
-std::vector<std::string> moveHistory;
-
 /** Function to initalize SDL (Simple DirectMedia Layer) **/
 bool init(SDL_Window** window, SDL_Renderer** renderer) {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
@@ -41,19 +38,6 @@ bool init(SDL_Window** window, SDL_Renderer** renderer) {
     }
 
     return true;
-}
-
-/** Function to convert a piece to String **/
-std::string piece_to_string(PieceType type) {
-    switch (type) {
-        case PAWN: return "";
-        case KNIGHT: return "N";
-        case BISHOP: return "B";
-        case ROOK: return "R";
-        case QUEEN: return "Q";
-        case KING: return "K";
-        default: return "";
-    }
 }
 
 /** Function to load Textures for Pieces **/
@@ -83,7 +67,6 @@ void reset_game(ChessBoard& board, bool& game_started, bool& is_white_turn, bool
     board = ChessBoard();
     game_started = false;
     is_white_turn = true;
-    moveHistory.clear();
     pieceSelected = false;
     selectedRow = -1;
     selectedCol = -1;
@@ -135,18 +118,14 @@ void show_game_end_message(SDL_Window* window, const char* message, ChessBoard& 
     }
 }
 
-void update_move_history(int srcRow, int srcCol, int destRow, int destCol, Piece piece) {
-    char cols[] = "abcdefgh";
-    std::string move = piece_to_string(piece.type) + cols[srcCol] + std::to_string(8 - srcRow) + " to " + cols[destCol] + std::to_string(8 - destRow);
-    moveHistory.push_back(move);
-}
-
 void make_move(ChessBoard& board, int srcRow, int srcCol, int destRow, int destCol) {
     std::cout << "Making move from (" << srcRow << "," << srcCol << ") to (" << destRow << "," << destCol << ")" << std::endl;
 
     Piece piece = board.board[srcRow][srcCol];
     std::cout << "Moving piece: " << piece.type << ", " << piece.color << std::endl;
-    update_move_history(srcRow, srcCol, destRow, destCol, piece);
+
+    // Record the move
+    board.record_move(srcRow, srcCol, destRow, destCol);
 
     // Handle en passant capture
     if (piece.type == PAWN && std::abs(destCol - srcCol) == 1 && board.board[destRow][destCol].type == EMPTY) {
@@ -167,17 +146,17 @@ void make_move(ChessBoard& board, int srcRow, int srcCol, int destRow, int destC
 
     // Update castling flags
     if (piece.type == KING) {
-        if (piece.color == WHITE) board.white_king_moved = true;
-        else board.black_king_moved = true;
+        if (piece.color == WHITE) board.whiteKingMoved = true;
+        else board.blackKingMoved = true;
     }
     else if (piece.type == ROOK) {
         if (piece.color == WHITE) {
-            if (srcCol == 0) board.white_queenside_rook_moved = true;
-            else if (srcCol == 7) board.white_kingside_rook_moved = true;
+            if (srcCol == 0) board.whiteQueensideRookMoved = true;
+            else if (srcCol == 7) board.whiteKingsideRookMoved = true;
         }
         else {
-            if (srcCol == 0) board.black_queenside_rook_moved = true;
-            else if (srcCol == 7) board.black_kingside_rook_moved = true;
+            if (srcCol == 0) board.blackQueensideRookMoved = true;
+            else if (srcCol == 7) board.blackKingsideRookMoved = true;
         }
     }
 
@@ -192,9 +171,9 @@ void make_move(ChessBoard& board, int srcRow, int srcCol, int destRow, int destC
     board.board[srcRow][srcCol] = { EMPTY, NONE };
 
     // Update last move
-    board.last_move_start = {srcRow, srcCol};
-    board.last_move = {destRow, destCol};
-    board.last_move_was_pawn_double = (piece.type == PAWN && std::abs(destRow - srcRow) == 2);
+    board.lastMoveStart = {srcRow, srcCol};
+    board.lastMove = {destRow, destCol};
+    board.lastMoveWasPawnDouble = (piece.type == PAWN && std::abs(destRow - srcRow) == 2);
 
     // Switch turns
     is_white_turn = !is_white_turn;
@@ -242,11 +221,14 @@ int main(int argc, char* args[]) {
 
     int button_width = 100;
     int button_height = 50;
-    int play_button_x = 650;
-    int play_button_y = 100;
-    int reset_button_x = 770;
-    int reset_button_y = 100;
-
+    int play_button_x = 690;
+    int play_button_y = 50;
+    int reset_button_x = 810;
+    int reset_button_y = 50;
+    int undo_button_x = 690;
+    int undo_button_y = 120;
+    int redo_button_x = 810;
+    int redo_button_y = 120;
 
     while (!quit) {
         while (SDL_PollEvent(&e) != 0) {
@@ -261,6 +243,22 @@ int main(int argc, char* args[]) {
                     std::cout << "Game started!" << std::endl;
                     make_best_move(chessBoard);
                     is_white_turn = false;  // Switch to Black's turn after AI moves
+                } else if (is_inside_button(x, y, undo_button_x, undo_button_y, button_width, button_height)) {
+                    if (chessBoard.undo_last_move()) {  // Undo AI move
+                        if (chessBoard.undo_last_move()) {  // Undo player move
+                            is_white_turn = false;  // It's the player's turn again
+                        } else {
+                            chessBoard.redo_move();  // If we can't undo player move, redo AI move
+                        }
+                    }
+                } else if (is_inside_button(x, y, redo_button_x, redo_button_y, button_width, button_height)) {
+                    if (chessBoard.redo_move()) {  // Redo player move
+                        if (chessBoard.redo_move()) {  // Redo AI move
+                            is_white_turn = false;  // It's the player's turn again
+                        } else {
+                            chessBoard.undo_last_move();  // If we can't redo AI move, undo player move
+                        }
+                    }
                 } else if (is_inside_button(x, y, reset_button_x, reset_button_y, button_width, button_height)) {
                     reset_game(chessBoard, game_started, is_white_turn, pieceSelected, selectedRow, selectedCol, valid_moves);
                 } else if (game_started && !is_white_turn) {  // Only allow moves on Black's turn
@@ -307,7 +305,9 @@ int main(int argc, char* args[]) {
         draw_pieces(renderer, chessBoard, white_pieces, black_pieces);
         draw_button(renderer, font, play_button_x, play_button_y, button_width, button_height, "Play");
         draw_button(renderer, font, reset_button_x, reset_button_y, button_width, button_height, "Reset");
-        draw_move_history(renderer, font, 650, 200, moveHistory);
+        draw_button(renderer, font, undo_button_x, undo_button_y, button_width, button_height, "Undo");
+        draw_button(renderer, font, redo_button_x, redo_button_y, button_width, button_height, "Redo");
+        draw_move_history(renderer, font, 650, 200, chessBoard);
         SDL_RenderPresent(renderer);
     }
 

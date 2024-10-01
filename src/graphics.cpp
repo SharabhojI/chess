@@ -73,7 +73,8 @@ void draw_button(SDL_Renderer* renderer, TTF_Font* font, int x, int y, int w, in
     SDL_DestroyTexture(textTexture);
 }
 
-void draw_move_history(SDL_Renderer* renderer, TTF_Font* font, int x, int y, const std::vector<std::string>& moveHistory) {
+void draw_move_history(SDL_Renderer* renderer, TTF_Font* font, int x, int y, const ChessBoard& board) {
+    auto moveHistory = board.get_move_history_strings();
     SDL_Color textColor = { 0, 0, 0, 255 }; // Black text
     for (size_t i = 0; i < moveHistory.size(); ++i) {
         SDL_Surface* textSurface = TTF_RenderText_Solid(font, moveHistory[i].c_str(), textColor);

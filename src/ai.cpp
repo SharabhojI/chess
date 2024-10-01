@@ -138,6 +138,10 @@ void make_best_move(ChessBoard& board) {
         std::cout << "AI selected move from (" << bestMoveFrom.first << "," << bestMoveFrom.second
                   << ") to (" << bestMoveTo.first << "," << bestMoveTo.second << ")" << std::endl;
 
+        // Record the move before making it
+        board.record_move(bestMoveFrom.first, bestMoveFrom.second, bestMoveTo.first, bestMoveTo.second);
+
+        // Make the move
         board.board[bestMoveTo.first][bestMoveTo.second] = board.board[bestMoveFrom.first][bestMoveFrom.second];
         board.board[bestMoveFrom.first][bestMoveFrom.second] = { EMPTY, NONE };
     } else {
